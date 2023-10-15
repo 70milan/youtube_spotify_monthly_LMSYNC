@@ -28,7 +28,8 @@ client_secrets_file = "csgo.json"
 
 yt_ids  = []
 yt_titles = []  # To store video titles
-
+yt_songs = []
+problematic_videos = []
 
 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
         client_secrets_file, scopes)
@@ -48,6 +49,14 @@ request = youtube.playlistItems().list(
 response_yt = request.execute()
 
 
+
+print(response_yt['pageInfo']['totalResults']) #total
+
+
+ydl_opts = {
+    'quiet': True,  # Disable console output for youtube-dl
+}
+
 while response_yt:
     # Extract yt_ids from the current page and add them to yt_ids 
     for item in response_yt['items']:
@@ -55,6 +64,19 @@ while response_yt:
         video_title = item['snippet']['title']
         yt_titles.append(video_title)
         yt_ids .append(video_id)
+        
+        # Use youtube-dl to extract metadata
+        video_url = f'https://www.youtube.com/watch?v={video_id}'
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+                track = info.get('title', 'Unknown Track')
+                rawartist = info.get('uploader', 'Unknown Artist')
+                artist = rawartist.replace(" - Topic", "")
+                yt_songs.append((track, artist))
+        except (youtube_dl.utils.ExtractorError, youtube_dl.utils.DownloadError) as e:
+            print(f"An error occurred while extracting information from the video {video_url}. Skipping...")
+            problematic_videos.append(video_id)
     
     # Check if there are more pages of results
     if 'nextPageToken' in response_yt:
@@ -71,31 +93,21 @@ while response_yt:
         # No more pages, exit the loop
         break
 
-
-
-print(response_yt['pageInfo']['totalResults']) #total
-
-df2 = pd.DataFrame({'Video ID': yt_ids, 'Video Title': yt_titles})
-
-ydl_opts = {
-    'quiet': True,  # Disable console output for youtube-dl
-}
-yt_songs = []
-for item in response_yt['items']:
-    video_id = item['snippet']['resourceId']['videoId']
-    video_url = f'https://www.youtube.com/watch?v={video_id}'
-    
-    # Use youtube-dl to extract metadata
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(video_url, download=False)
-        track = info.get('title', 'Unknown Track')
-        rawartist = info.get('uploader', 'Unknown Artist')
-        artist = rawartist.replace(" - Topic", "")
-        yt_songs.append((track, artist))
-
 # Print the extracted song names and artist information
 for track, artist in yt_songs:
     print(f"Track: {track}, Artist: {artist}")
+
+len(yt_songs)
+
+len(problematic_videos)
+
+
+
+df2 = pd.DataFrame({'Video ID': yt_ids, 'Video Title': yt_titles})
+
+
+
+
 
 user_input = input("Do you want to continue (yes/no): ")
 
@@ -105,12 +117,6 @@ if user_input.lower() == 'yes':
 else:
     print("Stopping the program.")
     sys.exit()
-
-
-
-
-
-
 
 
 
@@ -143,7 +149,7 @@ auth_manager = SpotifyOAuth(client_id=sp_client_id,
     # Get an access token
 access_token = auth_manager.get_access_token()
 access_token = access_token['access_token']
-
+print(access_token)
 headers_main = {
     'Authorization': f'Bearer {access_token}'
 }
@@ -202,6 +208,7 @@ new_spotify_track_names = [name for uri, name in zip(spotify_uris, spotify_track
 
 #how many
 print(f"Total tracks to be added in Spotify: {len(new_spotify_uris)}")
+
 
 #which ones
 print("Track names:")
