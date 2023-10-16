@@ -37,31 +37,20 @@ aws_secret_access_key = config.get('aws_creds', 'aws_secret_access_key')
 s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
 
 bucket_name = 's3numerone'
-file_path = 'processed_yt_ids.txt'
-
+file_path1 = 'processed_yt_ids.txt'
+file_path2 = 'existing_sp_uris.txt'
 # Check if the file exists in the bucket
 try:
-    s3.head_object(Bucket=bucket_name, Key=file_path)
+    s3.head_object(Bucket=bucket_name, Key=file_path1)
 except:
     # File does not exist, create a blank file
-    s3.put_object(Body='', Bucket=bucket_name, Key=file_path)
+    s3.put_object(Body='', Bucket=bucket_name, Key=file_path1)
 
 
-    
 
 
 
 print("Fetching YT MUSIC")
-
-user_input = input("Do you want to start (yes/no): ")
-
-if user_input.lower() == 'yes':
-    print("Continuing...")
-    # ... code for fetching Spotify data goes here ...
-else:
-    print("Stopping the program.")
-    sys.exit()
-
 
 
 
@@ -104,54 +93,39 @@ response_yt = request.execute()
 print(response_yt['pageInfo']['totalResults']) #total
 
 
+########## get bucket current ############
 
 
-obj = s3.get_object(Bucket=bucket_name, Key=file_path)
+obj = s3.get_object(Bucket=bucket_name, Key=file_path1)
 processed_yt_ids = obj['Body'].read().decode().splitlines()
 
+
+new_yt_ids = []
+for item in response_yt['items']:
+    video_id = item['snippet']['resourceId']['videoId']
+    if video_id in processed_yt_ids:
+        continue  # Skip this song if it has already been processed
+    new_yt_ids.append(video_id)
+
+# Use youtube-dl to extract metadata for the new YouTube video IDs
 ydl_opts = {
     'quiet': True,  # Disable console output for youtube-dl
 }
 
-while response_yt:
-    # Extract yt_ids from the current page and add them to yt_ids 
-    for item in response_yt['items']:
-        video_id = item['snippet']['resourceId']['videoId']
-        if video_id in processed_yt_ids:
-            continue  # Skip this song if it has already been processed
-        video_title = item['snippet']['title']
-        yt_titles.append(video_title)
-        yt_ids.append(video_id)
-        
-        # Use youtube-dl to extract metadata
-        video_url = f'https://www.youtube.com/watch?v={video_id}'
-        try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                track = info.get('title', 'Unknown Track')
-                rawartist = info.get('uploader', 'Unknown Artist')
-                artist = rawartist.replace(" - Topic", "")
-                yt_songs.append((track, artist))
-                # After successfully processing a song, append its YouTube video ID to the list of processed IDs
-                processed_yt_ids.append(video_id)
-        except (youtube_dl.utils.ExtractorError, youtube_dl.utils.DownloadError) as e:
-            print(f"An error occurred while extracting information from the video {video_url}. Skipping...")
-            problematic_videos.append(video_id)
-    
-    # Check if there are more pages of results
-    if 'nextPageToken' in response_yt:
-        next_page_token = response_yt['nextPageToken']
-        # Make a new request for the next page of results
-        request = youtube.playlistItems().list(
-            part="snippet",
-            playlistId="LM",
-            maxResults=50,  # You can adjust this number based on your needs
-            pageToken=next_page_token
-        )
-        response_yt = request.execute()
-    else:
-        # No more pages, exit the loop
-        break
+for video_id in new_yt_ids:
+    video_url = f'https://www.youtube.com/watch?v={video_id}'
+    try:
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            track = info.get('title', 'Unknown Track')
+            rawartist = info.get('uploader', 'Unknown Artist')
+            artist = rawartist.replace(" - Topic", "")
+            yt_songs.append((track, artist))
+            # After successfully processing a song, append its YouTube video ID to the list of processed IDs
+            processed_yt_ids.append(video_id)
+    except (youtube_dl.utils.ExtractorError, youtube_dl.utils.DownloadError) as e:
+        print(f"An error occurred while extracting information from the video {video_url}. Skipping...")
+        problematic_videos.append(video_id)
 
 #######################
 #######################
@@ -160,38 +134,12 @@ while response_yt:
 #######################
 
 
-s3.put_object(Body='\n'.join(processed_yt_ids), Bucket=bucket_name, Key=file_path)
 
 # Print the extracted song names and artist information
 for track, artist in yt_songs:
     print(f"Track: {track}, Artist: {artist}")
 
 len(yt_songs)
-
-len(problematic_videos)
-
-
-
-df2 = pd.DataFrame({'Video ID': yt_ids, 'Video Title': yt_titles})
-
-
-
-
-
-user_input = input("Do you want to continue (yes/no): ")
-
-if user_input.lower() == 'yes':
-    print("Continuing to the next part...")
-    # ... code for fetching Spotify data goes here ...
-else:
-    print("Stopping the program.")
-    sys.exit()
-
-
-
-
-
-
 
 #######################
 #######################
@@ -246,21 +194,37 @@ response_sp = requests.get('https://api.spotify.com/v1/me/tracks', headers=heade
 total = response_sp['total'] 
 print("Total spotify 'liked songs' found:", total)
 
-for offset in range(0, total, 20):
-    url = "https://api.spotify.com/v1/me/tracks?offset="+str(offset) + "&limit=20" 
-    response_sp1 = requests.get(url, headers=headers_main).json()
-    getter = response_sp1['items']
-    all_items.extend(getter)
-    percentage = (len(all_items) / total) * 100
-    print(f"Loading... {percentage}%")
 
-print("Processing all", total ,"songs found in Spotify user library")
 
+obj = s3.get_object(Bucket=bucket_name, Key=file_path2)
+file_content = obj['Body'].read().decode('utf-8')
+
+# Split the file content into a list of URIs
+existing_liked_uris = file_content.split('\n')
+
+'''
 #for j in all_items:    songs_name = [j['track']['name']]   sp_songs.append(songs_name)
 
 existing_liked_uris = [item["track"]["uri"] for item in all_items]
 
-''''  ytd - sp uris    '''
+
+existing_liked_uris.extend(existing_liked_uris)
+#len(existing_liked_uris)
+
+
+existing_liked_uris_str = '\n'.join(existing_liked_uris)
+s3_client.put_object(Body=existing_liked_uris_str, Bucket=bucket_name, Key=file_path)
+'''
+
+
+
+
+''''  ytd - sp uris   
+
+LOOKING UP THE OUT OF SYNC YOUTUBE SONG ON SPOTIFY
+
+'''
+
 spotify_uris = []
 spotify_track_names = []
 total_songs_not_found = 0
@@ -288,8 +252,9 @@ print(f"Total songs not found on Spotify: {total_songs_not_found}")
 
 # Filter out duplicates from the newly obtained Spotify URIs
 new_spotify_uris = [uri for uri in spotify_uris if uri not in existing_liked_uris]
-new_spotify_track_names = [name for uri, name in zip(spotify_uris, spotify_track_names) if uri in new_spotify_uris]
 
+
+new_spotify_track_names = [name for uri, name in zip(spotify_uris, spotify_track_names) if uri in new_spotify_uris]
 
 
 # Spotify allows a maximum of 50 URIs per request, so batch them if needed
@@ -302,15 +267,6 @@ print(f"Total tracks to be added in Spotify: {len(new_spotify_uris)}")
 print("Track names:")
 for name in new_spotify_track_names:
     print(name)
-user_input = input("Do you want to continue (yes/no): ")
-
-if user_input.lower() == 'yes':
-    print("Continuing to the next part...")
-    # ... code for fetching Spotify data goes here ...
-else:
-    print("Stopping the program.")
-    sys.exit()
-
 
 #######################
 #######################
@@ -345,7 +301,7 @@ else:
 print("Loading the songs to spotify")
 total_songs_added = 0
 
-for i in range(0, len(new_spotify_uris), 50):# Spotify allows a maximum of 50 URIs per request, so batch them if needed
+for i in range(0, len(new_spotify_uris), 50):
     batch_uris = new_spotify_uris[i:i + 50]
     data = json.dumps({'uris': batch_uris})
     sp = Spotify(auth=access_token)
@@ -353,9 +309,71 @@ for i in range(0, len(new_spotify_uris), 50):# Spotify allows a maximum of 50 UR
         sp.current_user_saved_tracks_add(tracks=batch_uris)
         total_songs_added += len(batch_uris)
         print(f"{len(batch_uris)} songs added successfully.")
+        spotify_songs_added = True
     except SpotifyException as e:
         print(f"Error: Songs can't be added. {e}")
 
 print(f"Total songs added: {total_songs_added}")
 
+if spotify_songs_added:
+    s3.put_object(Body='\n'.join(processed_yt_ids), Bucket=bucket_name, Key=file_path1)
+    s3.put_object(Body='\n'.join(existing_liked_uris), Bucket=bucket_name, Key=file_path1)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'''
+
+
+
+videotitles=[]
+videoids=[]
+
+while response_yt:
+    # Extract videoIds from the current page and add them to videoids 
+    for item in response_yt['items']:
+        video_id = item['snippet']['resourceId']['videoId']
+        video_title = item['snippet']['title']
+        videotitles.append(video_title)
+        videoids .append(video_id)
+    
+    # Check if there are more pages of results
+    if 'nextPageToken' in response_yt:
+        next_page_token = response_yt['nextPageToken']
+        # Make a new request for the next page of results
+        request = youtube.playlistItems().list(
+            part="snippet",
+            playlistId="LM",
+            maxResults=50,  # You can adjust this number based on your needs
+            pageToken=next_page_token
+        )
+        response_yt = request.execute()
+    else:
+        # No more pages, exit the loop
+        break
+
+
+'''
