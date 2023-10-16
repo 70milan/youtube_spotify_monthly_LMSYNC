@@ -118,16 +118,6 @@ else:
     print("Stopping the program.")
     sys.exit()
 
-
-
-
-
-
-
-
-
-
-
 ''' spotify '''
 print("checking spotify user library..... ")
 
@@ -136,7 +126,6 @@ sp_client_secret = 'bf412cc6cd4a458da9706b4c4e83e258'
 all_items=[]
 sp_songs=[] #might not need
 existing_liked_uris = []
-
 
 username = 'x5raulz6ufun7mia2v0s6oqeq'
 scope = "user-library-modify"
@@ -158,7 +147,6 @@ headers_main = {
 response_sp = requests.get('https://api.spotify.com/v1/me/tracks', headers=headers_main).json()
 total = response_sp['total'] 
 print("Total spotify 'liked songs' found:", total)
-
 
 for offset in range(0, total, 20):
     url = "https://api.spotify.com/v1/me/tracks?offset="+str(offset) + "&limit=20" 
@@ -232,17 +220,20 @@ else:
 
 
 print("Loading the songs to spotify")
+total_songs_added = 0
 
 for i in range(0, len(new_spotify_uris), 50):# Spotify allows a maximum of 50 URIs per request, so batch them if needed
-
     batch_uris = new_spotify_uris[i:i + 50]
     data = json.dumps({'uris': batch_uris})
     sp = Spotify(auth=access_token)
     try:
         sp.current_user_saved_tracks_add(tracks=batch_uris)
-        print("Songs added successfully.")
+        total_songs_added += len(batch_uris)
+        print(f"{len(batch_uris)} songs added successfully.")
     except SpotifyException as e:
         print(f"Error: Songs can't be added. {e}")
+
+print(f"Total songs added: {total_songs_added}")
 
 
 
