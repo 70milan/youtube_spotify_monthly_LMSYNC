@@ -16,7 +16,20 @@ from spotipy.exceptions import SpotifyException
 import sys
 
 
+
+
 print("Fetching YT MUSIC")
+
+user_input = input("Do you want to continue (yes/no): ")
+
+if user_input.lower() == 'yes':
+    print("Continuing to the next part...")
+    # ... code for fetching Spotify data goes here ...
+else:
+    print("Stopping the program.")
+    sys.exit()
+
+
 ''' youtube music'''
 
 scopes = ["https://www.googleapis.com/auth/youtube.readonly"]
@@ -165,7 +178,7 @@ existing_liked_uris = [item["track"]["uri"] for item in all_items]
 ''''  ytd - sp uris    '''
 spotify_uris = []
 spotify_track_names = []
-
+total_songs_not_found = 0
 for track, artist in yt_songs:
     # Search for the track on Spotify
     search_url = f"https://api.spotify.com/v1/search?q=track:{track} artist:{artist}&type=track"
@@ -182,14 +195,16 @@ for track, artist in yt_songs:
         spotify_track_names.append(track_name)
     else:
         # Handle the case when the song is not found
+        total_songs_not_found += 1
         print(f"Song not found on Spotify: Track='{track}', Artist='{artist}'")
 
-
+print(f"Total songs not found on Spotify: {total_songs_not_found}")
 
 
 # Filter out duplicates from the newly obtained Spotify URIs
 new_spotify_uris = [uri for uri in spotify_uris if uri not in existing_liked_uris]
 new_spotify_track_names = [name for uri, name in zip(spotify_uris, spotify_track_names) if uri in new_spotify_uris]
+
 
 
 # Spotify allows a maximum of 50 URIs per request, so batch them if needed
@@ -202,11 +217,6 @@ print(f"Total tracks to be added in Spotify: {len(new_spotify_uris)}")
 print("Track names:")
 for name in new_spotify_track_names:
     print(name)
-
-
-
-
-
 user_input = input("Do you want to continue (yes/no): ")
 
 if user_input.lower() == 'yes':
@@ -236,137 +246,3 @@ for i in range(0, len(new_spotify_uris), 50):# Spotify allows a maximum of 50 UR
 print(f"Total songs added: {total_songs_added}")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-qweqweqwe
-qwelqmwe;mq;ewqw
-def get_spotify_uri(track, artist, access_token):
-    """Search For the Song"""
- 
-    query = "https://api.spotify.com/v1/search?query=track%3A{}+artist%3A{}&type=track".format(
-        track,
-        artist
-    )
-    response = requests.get(
-        query,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": "Bearer {}".format("access_token")
-        }
-    )
-    songs = response["tracks"]["items"]
- 
-    url = songs[0]["uri"]
- 
-    return url
-
-
-
-get_spotify_uri(track, artist, access_token)
-
-
-
-def add_song(playlist_id, urls):
-    """Add all songs into the new Spotify playlist"""
- 
-    request_data = json.dumps(urls)
- 
-    query = "https://api.spotify.com/v1/playlists/{}/tracks".format(
-        playlist_id)
- 
-    response = requests.post(
-        query,
-        data=request_data,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": "Bearer {}".format("spotify_token")
-        }
-    )
- 
-    return response
-
-
-
-
-
-
-
-
-
-
-''' spotify '''
-all_items = []
-sp_songs = []
-sp_client_id = 'ca7fbe12e14546cb94ec1ec90c536bce'
-sp_client_secret = 'bf412cc6cd4a458da9706b4c4e83e258'
-
-username = 'x5raulz6ufun7mia2v0s6oqeq'
-scope = "user-library-read"
-redirect_uri = "http://localhost:7777/callback"
-
-auth_manager = SpotifyOAuth(client_id=sp_client_id,
-                                client_secret=sp_client_secret,
-                                redirect_uri=redirect_uri,
-                                scope=scope)
-    # Get an access token
-access_token = auth_manager.get_access_token()
-access_token = access_token['access_token']
-print(access_token)
-
-
-headers = {
-    'Authorization': f'Bearer {access_token}'
-}
-
-response_sp = requests.get('https://api.spotify.com/v1/me/tracks', headers=headers).json()
-total = response_sp['total'] 
-print("Total spotify 'liked songs' found:", total)
-
-
-for offset in range(0, total, 20):
-    url = "https://api.spotify.com/v1/me/tracks?offset="+str(offset) + "&limit=20" 
-    response_sp1 = requests.get(url, headers=headers).json()
-    getter = response_sp1['items']
-    all_items.extend(getter)
-
-print("Processing all", total ,"songs !!")
-
-for j in all_items:
-    songs_name = [j['track']['name']]
-    sp_songs.append(songs_name)
-    existing_liked_uris = [item["track"]["uri"] for item in all_items]
-
-
-
-
-#Extraction donito
